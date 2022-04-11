@@ -170,17 +170,65 @@ example(of: "API Client") {
         
     }
 
-    let aPIClient = APIClient()
+    class ViewModelStarWars: ObservableObject {
+        @Published var counter: Int = 0
+        let aPIClient = APIClient()
+    }
 
-        aPIClient.getFilms()
-        .print("films publisher")
-        .sink(receiveCompletion:
-                { print($0) },
-             receiveValue:
-                { print($0) })
+    let viewModelStarWars = ViewModelStarWars()
+    
+    let queue = DispatchQueue.main
+
+    queue.schedule(
+        after: queue.now,
+        interval: .seconds(10)) {
+        viewModelStarWars.counter += 1
+    }
+    .store(in: &cancellables)
+    
+    let subject = PassthroughSubject<Films, NetworkError>()
+    
+    let multicastedPublisherGetFilms = viewModelStarWars.aPIClient.getFilms()
+        .multicast(subject: subject)
+    
+    viewModelStarWars.$counter
+        .sink {
+            if $0 > 0 {
+                print ("Update data number \($0)")
+            }
+
+            viewModelStarWars.aPIClient.getFilms()
+            .print("films publisher")
+            .sink(receiveCompletion:
+                    { print($0) },
+                 receiveValue:
+                    { print($0) })
+            .store(in: &cancellables)
+
+        }
         .store(in: &cancellables)
+    
+    multicastedPublisherGetFilms
+        .sink(receiveCompletion:
+                { _ in },
+             receiveValue:
+                { print("Sub1 \($0)") })
+        .store(in: &cancellables)
+    
+    multicastedPublisherGetFilms
+        .sink(receiveCompletion:
+                { _ in },
+             receiveValue:
+                { print("Sub2 \($0)") })
+        .store(in: &cancellables)
+    
+    
+    multicastedPublisherGetFilms.connect()
+    subject.send(Films(count: 0, all: []))
 
-//    aPIClient.getStarShip(name: "Star Destroyer")
+
+
+//    viewModelStarWars.aPIClient.getStarShip(name: "Star Destroyer")
 //        .handleEvents(receiveSubscription:{_ in print("Network request will start")},
 //                      receiveOutput: {_ in print("Network request data received")},
 //                      receiveCompletion: {_ in print("Network request receive completion")},
